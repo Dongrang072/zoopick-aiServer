@@ -5,3 +5,6 @@ transformers
 Pillow
 requests
 ultralytics
+fastapi
+uvicorn
+python-multipart
