@@ -29,6 +29,13 @@ class VideoProcessor:
 
     def process(self, video_path: str) -> Optional[Dict[str, str]]:
         """비디오 파일을 읽어 도난 탐지 프로세스를 수행합니다."""
+        # 매번 영상이 들어올 때마다 프레임 수, 추적기 상태 등을 초기화
+        self.frame_count = 0
+        self.start_time = None
+        self.detector = TheftDetector(
+            stationary_threshold_frames=50, 
+            proximity_pixels=100
+        )
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             print(f"[ERROR]    Could not open video file: {video_path}")
