@@ -26,11 +26,13 @@ class TheftDetector:
     """도난 탐지 로직을 수행하는 메인 클래스"""
     
     def __init__(self, stationary_threshold_frames: int = 50, proximity_pixels: int = 100, 
-                 missing_threshold_frames: int = 10, output_dir: str = "output"):
+                 missing_threshold_frames: int = 10, output_dir: str = "output", video_id: int = 0):
         self.stationary_threshold = stationary_threshold_frames
         self.proximity_pixels = proximity_pixels
         self.missing_threshold = missing_threshold_frames
         self.output_dir = output_dir
+        self.video_id = video_id
+        self.detection_count = 0
         
         self.tracked_items: Dict[int, TrackedItem] = {}
         self.alerts = []
@@ -215,9 +217,12 @@ class TheftDetector:
 
     def _trigger_alert(self, item: TrackedItem, frame, score: float):
         """도난 경고를 발생시키고 증거 이미지를 저장합니다."""
+        self.detection_count += 1
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        moment_file = os.path.join(self.output_dir, f"theft_moment_ID{item.id}_{timestamp}.jpg")
-        baseline_file = os.path.join(self.output_dir, f"stolen_item_baseline_ID{item.id}_{timestamp}.jpg")
+        
+        # 파일명 규칙 적용: {video_id}-{sequence}_{type}.jpg
+        moment_file = os.path.join(self.output_dir, f"{self.video_id}-{self.detection_count}_theft_moment.jpg")
+        baseline_file = os.path.join(self.output_dir, f"{self.video_id}-{self.detection_count}_stolen_item.jpg")
         
         cv2.imwrite(moment_file, frame)
         if item.baseline_crop is not None:

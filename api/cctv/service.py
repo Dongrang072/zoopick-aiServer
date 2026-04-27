@@ -34,11 +34,11 @@ class CctvService:
             
             try:
                 for video in request.videos:
-                    # 1. 영상 처리 (도난 의심 장면 추출)
-                    snapshots = video_proc.process(video.url)
+                    # 1. 영상 처리 (도난 의심 장면들 추출 - 리스트 반환)
+                    snapshots_list = video_proc.process(video.url, video.video_id)
                     
-                    # 2. 추출된 스냅샷 상세 분석
-                    if snapshots:
+                    # 2. 추출된 모든 스냅샷들에 대해 상세 분석 수행
+                    for snapshots in snapshots_list:
                         # 카테고리 및 색상 분석
                         category, color = self.analyzer.analyze_item(snapshots['baseline'])
                         

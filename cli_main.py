@@ -21,11 +21,13 @@ def main():
     
         # 3. 비디오 처리 (도난 탐지 단계)
         print(f"\n[STEP 1]   Monitoring Video: {config.VIDEO_PATH}")
-        snapshots = video_proc.process(config.VIDEO_PATH)
+        snapshots_list = video_proc.process(config.VIDEO_PATH, video_id=0)
     
         # 4. 결과 분석 (도난 탐지 시)
-        if snapshots:
-            _process_theft_result(snapshots, analyzer)
+        if snapshots_list:
+            for idx, snapshots in enumerate(snapshots_list):
+                print(f"\n--- Detection Event {idx+1} ---")
+                _process_theft_result(snapshots, analyzer)
         else:
             print("\n[RESULT]   No theft events detected during monitoring.")
 

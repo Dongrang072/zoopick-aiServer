@@ -1,7 +1,7 @@
 import cv2
 import time
 import platform
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 import config
 from core.detector import TheftDetector
 
@@ -27,20 +27,22 @@ class VideoProcessor:
             if name in config.VALID_LOST_ITEMS:
                 self.target_indices.append(idx)
 
-    def process(self, video_path: str) -> Optional[Dict[str, str]]:
+    def process(self, video_path: str, video_id: int = 0) -> List[Dict[str, Any]]:
         """비디오 파일을 읽어 도난 탐지 프로세스를 수행합니다."""
         # 매번 영상이 들어올 때마다 프레임 수, 추적기 상태 등을 초기화
         self.frame_count = 0
         self.start_time = None
         self.detector = TheftDetector(
             stationary_threshold_frames=50, 
-            proximity_pixels=100
+            proximity_pixels=100,
+            video_id=video_id
         )
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Could not open video file: {video_path}")
             
-        theft_snapshots = None
+        # 모든 탐지 결과를 담을 리스트 (기존 단일 Dict에서 변경)
+        all_detections = []
         
         while cap.isOpened():
             ret, frame = cap.read()
@@ -61,8 +63,13 @@ class VideoProcessor:
             is_theft = self.detector.update(results[0], frame, config.VALID_LOST_ITEMS)
             
             if is_theft:
-                theft_snapshots = self._handle_theft_detection()
-                break
+                # 새로운 탐지가 발생하면 리스트에 추가 (break 제거)
+                last_alert = self.detector.alerts[-1]
+                all_detections.append({
+                    'baseline': last_alert['baseline_file'],
+                    'moment': last_alert['moment_file'],
+                    'confidence': last_alert['confidence']
+                })
 
             # UI 또는 상태 출력
             if config.SHOW_UI:
@@ -73,7 +80,7 @@ class VideoProcessor:
                 print(f"[INFO]     Processing... (Frame: {self.frame_count})")
                 
         self._cleanup(cap)
-        return theft_snapshots
+        return all_detections
 
     def _handle_theft_detection(self) -> dict:
         """도난이 탐지되었을 때 스냅샷 및 신뢰도 정보를 추출합니다."""
