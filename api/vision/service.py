@@ -1,6 +1,3 @@
-import torch
-from PIL import Image
-import requests
 from models.loader import load_models
 from models.analyzer import ImageAnalyzer
 
