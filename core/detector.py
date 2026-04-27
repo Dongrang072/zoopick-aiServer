@@ -31,6 +31,8 @@ class TheftDetector:
         self.proximity_pixels = proximity_pixels
         self.missing_threshold = missing_threshold_frames
         self.output_dir = output_dir
+        self.items_dir = os.path.join(output_dir, "items")
+        self.moments_dir = os.path.join(output_dir, "moments")
         self.video_id = video_id
         self.detection_count = 0
         
@@ -38,8 +40,10 @@ class TheftDetector:
         self.alerts = []
         self.logger = TheftLogger()
         
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        # 필요한 모든 디렉토리 생성
+        for d in [self.output_dir, self.items_dir, self.moments_dir]:
+            if d and not os.path.exists(d):
+                os.makedirs(d)
 
     def _calculate_distance(self, p1: Tuple[int, int], p2: Tuple[int, int]) -> float:
         """두 점 사이의 유클리드 거리를 계산합니다."""
@@ -220,9 +224,9 @@ class TheftDetector:
         self.detection_count += 1
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         
-        # 파일명 규칙 적용: {video_id}-{sequence}_{type}.jpg
-        moment_file = os.path.join(self.output_dir, f"{self.video_id}-{self.detection_count}_theft_moment.jpg")
-        baseline_file = os.path.join(self.output_dir, f"{self.video_id}-{self.detection_count}_stolen_item.jpg")
+        # 파일명 규칙 적용 및 폴더 분리: items/ 및 moments/
+        moment_file = os.path.join(self.moments_dir, f"{self.video_id}-{self.detection_count}_theft_moment.jpg")
+        baseline_file = os.path.join(self.items_dir, f"{self.video_id}-{self.detection_count}_stolen_item.jpg")
         
         cv2.imwrite(moment_file, frame)
         if item.baseline_crop is not None:
