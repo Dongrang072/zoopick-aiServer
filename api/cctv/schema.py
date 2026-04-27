@@ -36,7 +36,8 @@ class DetectionInfo(BaseModel):
     confidence: float
     category: str
     color: Optional[str] = None
-    snapshot_url: str
+    item_snapshot_url: str
+    moment_snapshot_url: str
 
 class CctvCallbackRequest(BaseModel):
     """

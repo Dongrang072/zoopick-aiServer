@@ -48,7 +48,8 @@ class CctvService:
                             confidence=snapshots.get('confidence'),
                             category=category,
                             color=color,
-                            snapshot_url=f"{snapshots['moment']}"
+                            item_snapshot_url=f"{snapshots['baseline']}",
+                            moment_snapshot_url=f"{snapshots['moment']}"
                         )
                         detections.append(detection)
                 
