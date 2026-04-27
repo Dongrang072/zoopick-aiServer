@@ -51,7 +51,6 @@ class CctvService:
                             snapshot_url=f"{snapshots['moment']}"
                         )
                         detections.append(detection)
-                        break
                 
                 status = "COMPLETED" if detections else "NO_DETECTION"
                 error_msg = None
