@@ -9,8 +9,6 @@ class VideoInfo(BaseModel):
     video_id: int
     url: str
     recorded_at: datetime
-    building_id: int
-    room_number: str
 
 class CctvAnalyzeRequest(BaseModel):
     """
