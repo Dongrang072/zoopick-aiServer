@@ -3,6 +3,7 @@ from core.processor import VideoProcessor
 from models.analyzer import ImageAnalyzer
 import requests
 import threading
+from datetime import timedelta
 from .schema import CctvAnalyzeRequest, CctvCallbackRequest, DetectionInfo
 from core.logger import TheftLogger
 from core.processor import VideoProcessor
@@ -42,9 +43,12 @@ class CctvService:
                         # 카테고리 및 색상 분석
                         category, color = self.analyzer.analyze_item(snapshots['baseline'])
                         
+                        # recorded_at + 포착 시점 경과 시간으로 실제 탐지 시각 계산
+                        detected_at = video.recorded_at + timedelta(seconds=snapshots['detected_seconds'])
+                        
                         detection = DetectionInfo(
                             video_id=video.video_id,
-                            detected_at=video.recorded_at.isoformat(),
+                            detected_at=detected_at.isoformat(),
                             confidence=snapshots.get('confidence'),
                             category=category,
                             color=color,

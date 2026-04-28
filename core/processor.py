@@ -40,6 +40,9 @@ class VideoProcessor:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Could not open video file: {video_path}")
+        
+        # 영상의 FPS 정보 (경과 시간 계산용)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             
         # 모든 탐지 결과를 담을 리스트 (기존 단일 Dict에서 변경)
         all_detections = []
@@ -63,12 +66,16 @@ class VideoProcessor:
             is_theft = self.detector.update(results[0], frame, config.VALID_LOST_ITEMS)
             
             if is_theft:
+                # 탐지 시점의 영상 내 경과 시간 (초)
+                detected_seconds = self.frame_count / fps
+                
                 # 새로운 탐지가 발생하면 리스트에 추가 (break 제거)
                 last_alert = self.detector.alerts[-1]
                 all_detections.append({
                     'baseline': last_alert['baseline_file'],
                     'moment': last_alert['moment_file'],
-                    'confidence': last_alert['confidence']
+                    'confidence': last_alert['confidence'],
+                    'detected_seconds': detected_seconds
                 })
 
             # UI 또는 상태 출력
