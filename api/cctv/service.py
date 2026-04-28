@@ -6,7 +6,6 @@ import threading
 from datetime import timedelta
 from .schema import CctvAnalyzeRequest, CctvCallbackRequest, DetectionInfo
 from core.logger import TheftLogger
-from core.processor import VideoProcessor
 
 class CctvService:
     def __init__(self):
@@ -25,10 +24,14 @@ class CctvService:
         """
         print(f"[INFO]     Queueing async video analysis for job: {request.job_id}")
         
+        # 변수 초기화 (Lock 외부에서 예외 발생 시 안전 보장)
+        detections = []
+        status = "FAILED"
+        error_msg = None
+        
         # 여러 요청이 들어와도 하나씩 순차적으로 처리 (Lock 사용)
         with self.lock:
             print(f"[INFO]     Starting analysis for job: {request.job_id}")
-            detections = []
             
             # 요청마다 독립적인 VideoProcessor 생성 (상태 간섭 방지)
             video_proc = VideoProcessor(self.yolo_model)
@@ -41,7 +44,11 @@ class CctvService:
                     # 2. 추출된 모든 스냅샷들에 대해 상세 분석 수행
                     for snapshots in snapshots_list:
                         # 카테고리 및 색상 분석
-                        category, color = self.analyzer.analyze_item(snapshots['baseline'])
+                        result = self.analyzer.analyze_item(snapshots['baseline'])
+                        if result is None:
+                            print(f"[WARN]     Image analysis failed, skipping detection")
+                            continue
+                        category, color = result
                         
                         # recorded_at + 포착 시점 경과 시간으로 실제 탐지 시각 계산
                         detected_at = video.recorded_at + timedelta(seconds=snapshots['detected_seconds'])
