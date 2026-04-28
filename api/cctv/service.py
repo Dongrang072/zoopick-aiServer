@@ -13,6 +13,7 @@ class CctvService:
         self.clip_model, self.processor, self.yolo_model = load_models()
 
         self.analyzer = ImageAnalyzer(self.clip_model, self.processor)
+        self.video_proc = VideoProcessor(self.yolo_model)
         self.logger = TheftLogger()
         
         # 동시성 제어를 위한 락 (GPU 리소스 및 트래커 보호)
@@ -33,13 +34,10 @@ class CctvService:
         with self.lock:
             print(f"[INFO]     Starting analysis for job: {request.job_id}")
             
-            # 요청마다 독립적인 VideoProcessor 생성 (상태 간섭 방지)
-            video_proc = VideoProcessor(self.yolo_model)
-            
             try:
                 for video in request.videos:
                     # 1. 영상 처리 (도난 의심 장면들 추출 - 리스트 반환)
-                    snapshots_list = video_proc.process(video.url, video.video_id)
+                    snapshots_list = self.video_proc.process(video.url, video.video_id)
                     
                     # 2. 추출된 모든 스냅샷들에 대해 상세 분석 수행
                     for snapshots in snapshots_list:
