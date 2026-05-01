@@ -55,7 +55,6 @@ class CctvService:
                         detection = DetectionInfo(
                             video_id=video.video_id,
                             detected_at=detected_at.isoformat(),
-                            confidence=snapshots.get('confidence'),
                             category=category,
                             color=color,
                             embedding=vector,

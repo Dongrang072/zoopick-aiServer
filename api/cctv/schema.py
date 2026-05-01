@@ -33,7 +33,6 @@ class DetectionInfo(BaseModel):
     """
     video_id: int
     detected_at: str
-    confidence: float
     category: str
     color: Optional[str] = None
     embedding: List[float]
