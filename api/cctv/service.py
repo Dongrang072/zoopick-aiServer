@@ -1,8 +1,10 @@
 import asyncio
+import uuid
 import requests
 import time
 from datetime import datetime, timedelta
 from typing import Dict, Any
+from pydantic import BaseModel
 
 from models.loader import load_models
 from core.processor import VideoProcessor
@@ -88,40 +90,78 @@ class CctvService:
         job["status"] = "IN_PROGRESS"
         job["started_at"] = datetime.now()
         
+        # 콜백 전송용 내부 함수
+        def send_progress(current_sec, percent):
+            job["progress"] = percent
+            self._send_callback(f"{req.callback_base_url}/api/internal/cctv/progress", 
+                               CctvProgressCallback(
+                                   video_id=video_id, status="IN_PROGRESS",
+                                   analyzed_seconds=int(current_sec),
+                                   total_seconds=req.duration_seconds,
+                                   progress_percent=percent
+                               ))
+
+        def on_detection(det_data):
+            # 이미지 상세 분석 (카테고리, 벡터)
+            result = self.analyzer.analyze_item(det_data['baseline'])
+            if result:
+                category, color = result
+                vector = self.analyzer.extract_vector(det_data['baseline'])
+                
+                # 검출 콜백 발송
+                detection_info = DetectionInfo(
+                    detection_id=str(uuid.uuid4()),
+                    video_id=video_id,
+                    detected_at=req.recorded_at + timedelta(seconds=det_data['detected_seconds']),
+                    detected_category=category.replace(" ", "_").upper(),
+                    detected_color=color.replace(" ", "_").upper(),
+                    item_snapshot_filename=det_data['baseline'].split('/')[-1],
+                    moment_snapshot_filename=det_data['moment'].split('/')[-1],
+                    embedding=vector
+                )
+                self._send_callback(f"{req.callback_base_url}/api/internal/cctv/detection", detection_info)
+                job["detection_count"] += 1
+
         # 1. 시작 콜백
-        self._send_callback(f"{req.callback_base_url}/api/internal/cctv/progress", 
-                           CctvProgressCallback(
-                               video_id=video_id, status="IN_PROGRESS",
-                               analyzed_seconds=0, total_seconds=req.duration_seconds,
-                               progress_percent=0.0
-                           ))
+        send_progress(0, 0.0)
 
         try:
-            start_time = time.time()
-            # VideoProcessor를 비동기 친화적으로 호출 (또는 run_in_executor 사용 고려)
-            # 여기서는 분석 도중 콜백을 보내기 위해 processor 내부에서 콜백 함수를 호출하도록 설계 변경 필요
-            
-            # --- 분석 로직 (예시 흐름) ---
-            # 1. video_proc.process 실행 시 콜백 함수를 인자로 넘김
-            # 2. 물체 발견 시마다 self._on_detection_found 호출
-            # 3. 진행률 업데이트 시마다 self._on_progress_update 호출
-            
-            # (상세 로직은 processor.py 수정 시 구현)
+            # 실시간 콜백을 인자로 넘겨 분석 시작
+            self.video_proc.process(
+                req.video_path, video_id, 
+                on_progress=send_progress, 
+                on_detection=on_detection
+            )
             
             # 4. 완료 콜백
             job["status"] = "COMPLETED"
+            job["progress"] = 100.0
             self._send_callback(f"{req.callback_base_url}/api/internal/cctv/completed",
-                               CctvCompletedCallback(...))
+                               CctvCompletedCallback(
+                                   video_id=video_id,
+                                   total_seconds=req.duration_seconds,
+                                   total_detections=job["detection_count"],
+                                   started_at=job["started_at"],
+                                   completed_at=datetime.now(),
+                                   duration_ms=int((datetime.now() - job["started_at"]).total_seconds() * 1000)
+                               ))
                                
         except Exception as e:
+            print(f"[ERROR] Analysis failed for {video_id}: {e}")
             job["status"] = "FAILED"
             self._send_callback(f"{req.callback_base_url}/api/internal/cctv/failed",
-                               CctvFailedCallback(...))
+                               CctvFailedCallback(
+                                   video_id=video_id,
+                                   error_code="ANALYSIS_ERROR",
+                                   error_message=str(e),
+                                   analyzed_seconds=int(req.duration_seconds * (job["progress"] / 100)),
+                                   total_seconds=req.duration_seconds
+                               ))
 
     def _send_callback(self, url: str, payload: BaseModel):
         """HTTP POST 콜백 전송 (에러 핸들링 포함)"""
         try:
-            res = requests.post(url, json=payload.model_dump())
+            res = requests.post(url, json=payload.model_dump(mode='json'))
             return res.status_code == 200
         except Exception as e:
             print(f"[WARN] Callback failed: {e}")
