@@ -16,6 +16,7 @@ from api.cctv.schema import (
     CctvCompletedCallback, CctvFailedCallback,
     CctvStatusResponse
 )
+from config import config
 
 class CctvService:
     _instance = None
@@ -65,6 +66,10 @@ class CctvService:
             if status in ["PENDING", "IN_PROGRESS"]:
                 return CctvEnqueueResponse(video_id=request.video_id, queued=False, reason="ALREADY_QUEUED")
 
+        # 1. 내 앞의 대기 시간 계산 (현재 요청 추가 전)
+        wait_sec = self._calculate_current_wait_time()
+        est_start = datetime.now() + timedelta(seconds=wait_sec)
+
         job_info = {
             "request": request,
             "status": "PENDING",
@@ -78,13 +83,45 @@ class CctvService:
         
         pos = self.queue.qsize()
         print(f"[INFO]     Job queued. Current queue size: {pos}")
-        return CctvEnqueueResponse(video_id=request.video_id, queued=True, queue_position=pos)
+        return CctvEnqueueResponse(
+            video_id=request.video_id, 
+            queued=True, 
+            queue_position=pos,
+            estimated_start_at=est_start
+        )
+
+    def _calculate_current_wait_time(self) -> float:
+        """현재 대기 중인 작업들이 완료될 때까지의 예상 소요 시간(초)을 계산합니다."""
+        total_wait = 0.0
+        
+        for job in self.active_jobs.values():
+            if job["status"] == "IN_PROGRESS":
+                # 진행 중인 작업의 남은 분량
+                rem_percent = 1.0 - (job["progress"] / 100.0)
+                total_wait += (job["total_seconds"] * rem_percent) / config.ANALYSIS_SPEED_FACTOR
+            elif job["status"] == "PENDING":
+                # 대기 중인 작업의 전체 분량
+                total_wait += job["total_seconds"] / config.ANALYSIS_SPEED_FACTOR
+                
+        return total_wait
 
     def get_job_status(self, video_id: int) -> Optional[CctvStatusResponse]:
         if video_id not in self.active_jobs:
             return None 
 
         info = self.active_jobs[video_id]
+        
+        # 예상 완료 시간 계산
+        est_completion = None
+        if info["status"] == "IN_PROGRESS" and info["started_at"] and info["progress"] > 0:
+            elapsed = (datetime.now() - info["started_at"]).total_seconds()
+            total_est = elapsed / (info["progress"] / 100.0)
+            rem_est = total_est - elapsed
+            est_completion = datetime.now() + timedelta(seconds=rem_est)
+        elif info["status"] == "PENDING":
+            # 대기 중인 경우: 내 앞의 대기 시간 + 내 영상 처리 시간
+            pass
+
         return CctvStatusResponse(
             video_id=video_id,
             status=info["status"],
@@ -92,7 +129,8 @@ class CctvService:
             total_seconds=info["total_seconds"],
             progress_percent=round(float(info["progress"]), 1),
             detection_count_so_far=info["detection_count"],
-            started_at=info["started_at"]
+            started_at=info["started_at"],
+            estimated_completion_at=est_completion
         )
 
     async def run_worker(self):

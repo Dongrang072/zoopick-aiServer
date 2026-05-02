@@ -41,6 +41,9 @@ class Settings:
     # --- 근접 이력 유효 시간 (초 단위) ---
     NEAR_HISTORY_TOUCH_DURATION = 4.0      # 접촉 시 이력 유지 시간
     NEAR_HISTORY_PROXIMITY_DURATION = 2.0  # 근접 시 이력 유지 시간
+    
+    # --- 분석 속도 및 시간 예측 ---
+    ANALYSIS_SPEED_FACTOR = 0.5    # 분석 속도 계수 (실제 영상 시간 대비 처리 속도)
 
     # --- 도난 신뢰도 점수 가중치 ---
     THEFT_CONFIDENCE_THRESHOLD = 0.7
