@@ -85,12 +85,12 @@ class CctvService:
 
     async def run_worker(self):
         """백그라운드에서 큐를 감시하며 작업을 하나씩 처리"""
-        # 시작 전 초기화 확인
         self.initialize()
         print("[INFO]     Worker started and waiting for jobs...")
         while True:
             video_id = await self.queue.get()
             try:
+                print(f"[INFO]     Starting analysis for Video ID: {video_id}")
                 await self._process_video(video_id)
             except Exception as e:
                 print(f"[ERROR]    Worker failed for video {video_id}: {e}")
@@ -136,7 +136,9 @@ class CctvService:
         send_progress(0, 0.0)
 
         try:
-            self.video_proc.process(
+            # 동기 함수인 process를 별도 스레드에서 실행하여 루프 블로킹 방지
+            await asyncio.to_thread(
+                self.video_proc.process,
                 req.video_path, video_id, 
                 on_progress=send_progress, 
                 on_detection=on_detection
