@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status, HTTPException
-from .schema import CctvEnqueueRequest, CctvEnqueueResponse, CctvStatusResponse
-from .service import cctv_service
+from api.cctv.schema import CctvEnqueueRequest, CctvEnqueueResponse, CctvStatusResponse
+from api.cctv.service import cctv_service
 
 router = APIRouter(
     prefix="/cctv",

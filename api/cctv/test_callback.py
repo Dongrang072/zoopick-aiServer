@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .schema import (
+from api.cctv.schema import (
     CctvProgressCallback, DetectionInfo, 
     CctvCompletedCallback, CctvFailedCallback,
     DetectionCallbackResponse
