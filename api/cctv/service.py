@@ -3,7 +3,7 @@ import uuid
 import requests
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
 from models.loader import load_models
@@ -19,15 +19,27 @@ from .schema import (
 
 class CctvService:
     def __init__(self):
-        # 모델 및 도구 초기화
+        # 모델 및 도구 초기화 (initialize()에서 완료됨)
+        self.clip_model = None
+        self.processor = None
+        self.yolo_model = None
+        self.analyzer = None
+        self.video_proc = None
+        self.logger = TheftLogger()
+        
+        # 큐 및 작업 관리 (지연 초기화)
+        self._queue = None
+        self.active_jobs: Dict[int, Dict[str, Any]] = {} # video_id -> status_info
+
+    def initialize(self):
+        """서버 시작 시 호출되어 모델 및 프로세서를 초기화합니다."""
+        if self.analyzer is not None:
+            return # 이미 초기화됨
+
+        print("[INFO]     Initializing CctvService models and processors...")
         self.clip_model, self.processor, self.yolo_model = load_models()
         self.analyzer = ImageAnalyzer(self.clip_model, self.processor)
         self.video_proc = VideoProcessor(self.yolo_model)
-        self.logger = TheftLogger()
-        
-        # 큐 및 작업 관리 (지연 초기화 예정)
-        self._queue = None
-        self.active_jobs: Dict[int, Dict[str, Any]] = {} # video_id -> status_info
 
     @property
     def queue(self) -> asyncio.Queue:
@@ -40,10 +52,8 @@ class CctvService:
         if request.video_id in self.active_jobs:
             status = self.active_jobs[request.video_id]['status']
             if status in ["PENDING", "IN_PROGRESS"]:
-                #이미 적재돼있다면 ALREADY QUEUED 반환
                 return CctvEnqueueResponse(video_id=request.video_id, queued=False, reason="ALREADY_QUEUED")
 
-        # 작업 상태 초기화
         job_info = {
             "request": request,
             "status": "PENDING",
@@ -53,17 +63,13 @@ class CctvService:
             "total_seconds": request.duration_seconds
         }
         self.active_jobs[request.video_id] = job_info
-        
         await self.queue.put(request.video_id)
         
-        # 큐 위치 계산
         pos = self.queue.qsize()
         return CctvEnqueueResponse(video_id=request.video_id, queued=True, queue_position=pos)
 
-    def get_job_status(self, video_id: int) -> CctvStatusResponse:
-        """현재 작업의 진행 상태 반환"""
+    def get_job_status(self, video_id: int) -> Optional[CctvStatusResponse]:
         if video_id not in self.active_jobs:
-            # 메모리 기준
             return None 
 
         info = self.active_jobs[video_id]
@@ -79,6 +85,8 @@ class CctvService:
 
     async def run_worker(self):
         """백그라운드에서 큐를 감시하며 작업을 하나씩 처리"""
+        # 시작 전 초기화 확인
+        self.initialize()
         print("[INFO]     Worker started and waiting for jobs...")
         while True:
             video_id = await self.queue.get()
@@ -96,7 +104,6 @@ class CctvService:
         job["status"] = "IN_PROGRESS"
         job["started_at"] = datetime.now()
         
-        # 콜백 전송용 내부 함수
         def send_progress(current_sec, percent):
             job["progress"] = percent
             self._send_callback(f"{req.callback_base_url}/api/internal/cctv/progress", 
@@ -108,13 +115,11 @@ class CctvService:
                                ))
 
         def on_detection(det_data):
-            # 이미지 상세 분석 (카테고리, 벡터)
             result = self.analyzer.analyze_item(det_data['baseline'])
             if result:
                 category, color = result
                 vector = self.analyzer.extract_vector(det_data['baseline'])
                 
-                # 검출 콜백 발송
                 detection_info = DetectionInfo(
                     detection_id=str(uuid.uuid4()),
                     video_id=video_id,
@@ -128,18 +133,15 @@ class CctvService:
                 self._send_callback(f"{req.callback_base_url}/api/internal/cctv/detection", detection_info)
                 job["detection_count"] += 1
 
-        # 1. 시작 콜백
         send_progress(0, 0.0)
 
         try:
-            # 실시간 콜백을 인자로 넘겨 분석 시작
             self.video_proc.process(
                 req.video_path, video_id, 
                 on_progress=send_progress, 
                 on_detection=on_detection
             )
             
-            # 4. 완료 콜백
             job["status"] = "COMPLETED"
             job["progress"] = 100.0
             self._send_callback(f"{req.callback_base_url}/api/internal/cctv/completed",
