@@ -90,7 +90,7 @@ class CctvService:
             status=info["status"],
             analyzed_seconds=int(info["total_seconds"] * (info["progress"] / 100)),
             total_seconds=info["total_seconds"],
-            progress_percent=info["progress"],
+            progress_percent=round(float(info["progress"]), 1),
             detection_count_so_far=info["detection_count"],
             started_at=info["started_at"]
         )
@@ -125,14 +125,15 @@ class CctvService:
             )
 
         def send_progress(current_sec, percent):
-            job["progress"] = percent
+            rounded_percent = round(float(percent), 1)
+            job["progress"] = rounded_percent
             trigger_callback_async(
                 f"{req.callback_base_url}/api/internal/cctv/progress", 
                 CctvProgressCallback(
                     video_id=video_id, status="IN_PROGRESS",
                     analyzed_seconds=int(current_sec),
                     total_seconds=req.duration_seconds,
-                    progress_percent=percent
+                    progress_percent=rounded_percent
                 )
             )
 
