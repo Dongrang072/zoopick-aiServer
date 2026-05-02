@@ -1,94 +1,131 @@
+import asyncio
+import requests
+import time
+from datetime import datetime, timedelta
+from typing import Dict, Any
+
 from models.loader import load_models
 from core.processor import VideoProcessor
 from models.analyzer import ImageAnalyzer
-import requests
-import threading
-from datetime import timedelta
-from .schema import CctvAnalyzeRequest, CctvCallbackRequest, DetectionInfo
 from core.logger import TheftLogger
+from .schema import (
+    CctvEnqueueRequest, CctvEnqueueResponse, 
+    CctvProgressCallback, DetectionInfo,
+    CctvCompletedCallback, CctvFailedCallback,
+    CctvStatusResponse
+)
 
 class CctvService:
     def __init__(self):
-        # 1. 모델 가져오기
+        # 모델 및 도구 초기화
         self.clip_model, self.processor, self.yolo_model = load_models()
-
         self.analyzer = ImageAnalyzer(self.clip_model, self.processor)
         self.video_proc = VideoProcessor(self.yolo_model)
         self.logger = TheftLogger()
         
-        # 동시성 제어를 위한 락 (GPU 리소스 및 트래커 보호)
-        self.lock = threading.Lock()
-    
-    def analyze_video_async(self, request: CctvAnalyzeRequest):
-        """
-        백그라운드에서 실행될 비디오 분석 및 결과 전송 로직
-        """
-        print(f"[INFO]     Queueing async video analysis for job: {request.job_id}")
+        # 큐 및 작업 관리
+        self.queue = asyncio.Queue()
+        self.active_jobs: Dict[int, Dict[str, Any]] = {} # video_id -> status_info
+
+    async def enqueue_video(self, request: CctvEnqueueRequest) -> CctvEnqueueResponse:
+        """분석 요청을 큐에 적재"""
+        if request.video_id in self.active_jobs:
+            status = self.active_jobs[request.video_id]['status']
+            if status in ["PENDING", "IN_PROGRESS"]:
+                #이미 적재돼있다면 ALREADY QUEUED 반환
+                return CctvEnqueueResponse(video_id=request.video_id, queued=False, reason="ALREADY_QUEUED")
+
+        # 작업 상태 초기화
+        job_info = {
+            "request": request,
+            "status": "PENDING",
+            "progress": 0.0,
+            "detection_count": 0,
+            "started_at": None,
+            "total_seconds": request.duration_seconds
+        }
+        self.active_jobs[request.video_id] = job_info
         
-        # 변수 초기화 (Lock 외부에서 예외 발생 시 안전 보장)
-        detections = []
-        status = "FAILED"
-        error_msg = None
+        await self.queue.put(request.video_id)
         
-        # 여러 요청이 들어와도 하나씩 순차적으로 처리 (Lock 사용)
-        with self.lock:
-            print(f"[INFO]     Starting analysis for job: {request.job_id}")
-            
-            try:
-                for video in request.videos:
-                    # 1. 영상 처리 (도난 의심 장면들 추출 - 리스트 반환)
-                    snapshots_list = self.video_proc.process(video.url, video.video_id)
-                    
-                    # 2. 추출된 모든 스냅샷들에 대해 상세 분석 수행
-                    for snapshots in snapshots_list:
-                        # 카테고리 및 색상 분석
-                        result = self.analyzer.analyze_item(snapshots['baseline'])
-                        if result is None:
-                            print(f"[WARN]     Image analysis failed, skipping detection")
-                            continue
-                        category, color = result
-                        vector =  self.analyzer.extract_vector(snapshots['baseline'])
-                        
-                        # recorded_at + 포착 시점 경과 시간으로 실제 탐지 시각 계산
-                        detected_at = video.recorded_at + timedelta(seconds=snapshots['detected_seconds'])
-                        
-                        detection = DetectionInfo(
-                            video_id=video.video_id,
-                            detected_at=detected_at.isoformat(),
-                            category=category.replace(" ", "_").upper(),
-                            color=color.replace(" ", "_").upper(),
-                            embedding=vector,
-                            item_snapshot_url=f"{snapshots['baseline']}",
-                            moment_snapshot_url=f"{snapshots['moment']}"
-                        )
-                        detections.append(detection)
-                
-                status = "COMPLETED" if detections else "NO_DETECTION"
-                error_msg = None
-                
-            except Exception as e:
-                print(f"[ERROR]    Async analysis failed: {e}")
-                status = "FAILED"
-                error_msg = str(e)
-            
-        # 콜백용 객체
-        callback_payload = CctvCallbackRequest(
-            job_id=request.job_id,
-            status=status,
-            detections=detections,
-            error_message=error_msg
+        # 큐 위치 계산
+        pos = self.queue.qsize()
+        return CctvEnqueueResponse(video_id=request.video_id, queued=True, queue_position=pos)
+
+    def get_job_status(self, video_id: int) -> CctvStatusResponse:
+        """현재 작업의 진행 상태 반환"""
+        if video_id not in self.active_jobs:
+            # 메모리 기준
+            return None 
+
+        info = self.active_jobs[video_id]
+        return CctvStatusResponse(
+            video_id=video_id,
+            status=info["status"],
+            analyzed_seconds=int(info["total_seconds"] * (info["progress"] / 100)),
+            total_seconds=info["total_seconds"],
+            progress_percent=info["progress"],
+            detection_count_so_far=info["detection_count"],
+            started_at=info["started_at"]
         )
+
+    async def run_worker(self):
+        """백그라운드에서 큐를 감시하며 작업을 하나씩 처리"""
+        print("[INFO] Worker started and waiting for jobs...")
+        while True:
+            video_id = await self.queue.get()
+            try:
+                await self._process_video(video_id)
+            except Exception as e:
+                print(f"[ERROR] Worker failed for video {video_id}: {e}")
+            finally:
+                self.queue.task_done()
+
+    async def _process_video(self, video_id: int):
+        """실제 영상 분석 및 콜백 전송 로직"""
+        job = self.active_jobs[video_id]
+        req: CctvEnqueueRequest = job["request"]
+        job["status"] = "IN_PROGRESS"
+        job["started_at"] = datetime.now()
         
-        # 3. 결과 로깅 (콜백 데이터와 동일한 형식)
-        self.logger.log_callback(callback_payload.model_dump())
-        
-        print(f"[INFO]     Analysis complete. Sending callback to: {request.callback_url}")
+        # 1. 시작 콜백
+        self._send_callback(f"{req.callback_base_url}/api/internal/cctv/progress", 
+                           CctvProgressCallback(
+                               video_id=video_id, status="IN_PROGRESS",
+                               analyzed_seconds=0, total_seconds=req.duration_seconds,
+                               progress_percent=0.0
+                           ))
+
         try:
-            # 콜백 주소로 콜백하기 (.model_dump() 사용)
-            response = requests.post(request.callback_url, json=callback_payload.model_dump())
-            print(f"[INFO]     Callback Status: {response.status_code}")
+            start_time = time.time()
+            # VideoProcessor를 비동기 친화적으로 호출 (또는 run_in_executor 사용 고려)
+            # 여기서는 분석 도중 콜백을 보내기 위해 processor 내부에서 콜백 함수를 호출하도록 설계 변경 필요
+            
+            # --- 분석 로직 (예시 흐름) ---
+            # 1. video_proc.process 실행 시 콜백 함수를 인자로 넘김
+            # 2. 물체 발견 시마다 self._on_detection_found 호출
+            # 3. 진행률 업데이트 시마다 self._on_progress_update 호출
+            
+            # (상세 로직은 processor.py 수정 시 구현)
+            
+            # 4. 완료 콜백
+            job["status"] = "COMPLETED"
+            self._send_callback(f"{req.callback_base_url}/api/internal/cctv/completed",
+                               CctvCompletedCallback(...))
+                               
         except Exception as e:
-            print(f"[CRITICAL] Failed to send callback: {e}")
+            job["status"] = "FAILED"
+            self._send_callback(f"{req.callback_base_url}/api/internal/cctv/failed",
+                               CctvFailedCallback(...))
+
+    def _send_callback(self, url: str, payload: BaseModel):
+        """HTTP POST 콜백 전송 (에러 핸들링 포함)"""
+        try:
+            res = requests.post(url, json=payload.model_dump())
+            return res.status_code == 200
+        except Exception as e:
+            print(f"[WARN] Callback failed: {e}")
+            return False
 
 # 싱글톤 객체
 cctv_service = CctvService()
