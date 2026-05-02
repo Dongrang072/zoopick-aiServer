@@ -25,8 +25,8 @@ class VisionService:
             vector = [0.0] * 512 # 실패 시 빈 벡터라도 반환
 
         return {
-            "category": category,
-            "color": color,
+            "category": category.replace(" ", "_").upper(),
+            "color": color.replace(" ", "_").upper(),
             "embedding": vector
         }
 # 싱글톤 객체
