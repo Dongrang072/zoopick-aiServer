@@ -22,29 +22,12 @@ async def enqueue_cctv(request: CctvEnqueueRequest):
         )
 
     # 2. 허용된 경로 prefix 검사 (400 INVALID_PATH)
-    # 명세상의 경로: /var/mju-lostfound/cctv/videos/
-    allowed_prefix = "/var/mju-lostfound/cctv/videos/"
-
-    if not request.video_path.startswith(allowed_prefix):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error_code": "INVALID_PATH", "message": f"Path must start with {allowed_prefix}"}
-        )
-
-    # 3. 파일 존재 여부 검사 (404 VIDEO_NOT_FOUND)
-    if not os.path.exists(request.video_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"error_code": "VIDEO_NOT_FOUND", "message": "Video file not found at given path"}
-        )
-
-    # 2. 허용된 경로 prefix 검사 (400 INVALID_PATH)
     # 명세서 기준 prefix
     allowed_prefix = "/var/mju-lostfound/cctv/videos/"
     # 로컬 개발 환경용 prefix (필요시 활성화)
     dev_prefix = "/Users/keonwoo/Documents/capstone_project/ai/video/"
 
-    if not request.video_path.startswith(allowed_prefix):
+    if not request.video_path.startswith(dev_prefix):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error_code": "INVALID_PATH", "message": f"Path must start with {allowed_prefix}"}
