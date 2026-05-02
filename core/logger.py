@@ -48,18 +48,17 @@ class TheftLogger:
 
     def log_callback(self, data: Dict[str, Any]):
         """
-        콜백 데이터 형식을 그대로 유지하면서 타임스탬프만 추가하여 기록합니다.
-        
-        Args:
-            data: CctvCallbackRequest의 model_dump() 결과 데이터
+        콜백 데이터 형식을 그대로 유지하면서 기록합니다.
         """
         entry = data.copy()
-        # 콜백 데이터와 겹치지 않는 필드명 사용
-        entry['logged_at'] = datetime.now().isoformat()
+        # datetime 객체가 포함되어 있을 수 있으므로 처리
+        for key, value in entry.items():
+            if isinstance(value, datetime):
+                entry[key] = value.isoformat()
         
         self.events.append(entry)
         self._save()
-        print(f"[LOGGER]   Callback data logged (Job ID: {entry.get('job_id')})")
+        print(f"[LOGGER]   Callback data logged (Video ID: {entry.get('video_id')})")
 
     def _save(self):
         """현재까지의 모든 이벤트를 JSON 파일로 저장합니다."""

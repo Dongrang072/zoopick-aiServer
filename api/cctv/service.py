@@ -152,6 +152,11 @@ class CctvService:
                     moment_snapshot_filename=det_data['moment'].split('/')[-1],
                     embedding=vector
                 )
+                
+                # 로컬 로그 기록 (DetectionInfo 형식)
+                self.logger.log_callback(detection_info.model_dump())
+                
+                # 외부 콜백 전송
                 trigger_callback_async(f"{req.callback_base_url}/api/internal/cctv/detection", detection_info)
                 job["detection_count"] += 1
 
@@ -168,30 +173,37 @@ class CctvService:
             
             job["status"] = "COMPLETED"
             job["progress"] = 100.0
+            completed_payload = CctvCompletedCallback(
+                video_id=video_id,
+                total_seconds=req.duration_seconds,
+                total_detections=job["detection_count"],
+                started_at=job["started_at"],
+                completed_at=datetime.now(),
+                duration_ms=int((datetime.now() - job["started_at"]).total_seconds() * 1000)
+            )
+            
+            # 외부 콜백 전송
             trigger_callback_async(
                 f"{req.callback_base_url}/api/internal/cctv/completed",
-                CctvCompletedCallback(
-                    video_id=video_id,
-                    total_seconds=req.duration_seconds,
-                    total_detections=job["detection_count"],
-                    started_at=job["started_at"],
-                    completed_at=datetime.now(),
-                    duration_ms=int((datetime.now() - job["started_at"]).total_seconds() * 1000)
-                )
+                completed_payload
             )
                                
         except Exception as e:
             print(f"[ERROR]    Analysis failed for {video_id}: {e}")
             job["status"] = "FAILED"
+            
+            failed_payload = CctvFailedCallback(
+                video_id=video_id,
+                error_code="ANALYSIS_ERROR",
+                error_message=str(e),
+                analyzed_seconds=int(req.duration_seconds * (job["progress"] / 100)),
+                total_seconds=req.duration_seconds
+            )
+            
+            # 외부 콜백 전송
             trigger_callback_async(
                 f"{req.callback_base_url}/api/internal/cctv/failed",
-                CctvFailedCallback(
-                    video_id=video_id,
-                    error_code="ANALYSIS_ERROR",
-                    error_message=str(e),
-                    analyzed_seconds=int(req.duration_seconds * (job["progress"] / 100)),
-                    total_seconds=req.duration_seconds
-                )
+                failed_payload
             )
 
     def _send_callback_impl(self, url: str, payload: BaseModel):
