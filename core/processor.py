@@ -27,8 +27,9 @@ class VideoProcessor:
             if name in config.VALID_LOST_ITEMS:
                 self.target_indices.append(idx)
 
-    def process(self, video_path: str, video_id: int = 0) -> List[Dict[str, Any]]:
-        """비디오 파일을 읽어 도난 탐지 프로세스를 수행합니다."""
+    def process(self, video_path: str, video_id: int = 0, 
+                on_progress=None, on_detection=None) -> List[Dict[str, Any]]:
+        """비디오 파일을 읽어 도난 탐지 프로세스를 수행하며 실시간 이벤트를 알립니다."""
         # 매번 영상이 들어올 때마다 프레임 수, 추적기 상태 등을 초기화
         self.frame_count = 0
         self.start_time = None
@@ -41,10 +42,10 @@ class VideoProcessor:
         if not cap.isOpened():
             raise ValueError(f"Could not open video file: {video_path}")
         
-        # 영상의 FPS 정보 (경과 시간 계산용)
+        # 영상 정보 (전체 프레임, FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
             
-        # 모든 탐지 결과를 담을 리스트 (기존 단일 Dict에서 변경)
         all_detections = []
         
         while cap.isOpened():
@@ -68,23 +69,36 @@ class VideoProcessor:
             if is_theft:
                 # 탐지 시점의 영상 내 경과 시간 (초)
                 detected_seconds = self.frame_count / fps
-                
-                # 새로운 탐지가 발생하면 리스트에 추가 (break 제거)
                 last_alert = self.detector.alerts[-1]
-                all_detections.append({
+                
+                detection_data = {
                     'baseline': last_alert['baseline_file'],
                     'moment': last_alert['moment_file'],
                     'confidence': last_alert['confidence'],
                     'detected_seconds': detected_seconds
-                })
+                }
+                all_detections.append(detection_data)
+                
+                # [실시간] 검출 콜백 호출
+                if on_detection:
+                    on_detection(detection_data)
+
+            # [실시간] 진행률 보고 (10% 단위)
+            progress_interval = max(1, total_frames // 10)
+            if self.frame_count % progress_interval == 0 or self.frame_count == total_frames:
+                progress_percent = (self.frame_count / total_frames) * 100 if total_frames > 0 else 0
+                current_seconds = self.frame_count / fps
+                if on_progress:
+                    on_progress(current_seconds, progress_percent)
+                
+                if not config.SHOW_UI:
+                    print(f"[INFO]     Processing... {progress_percent:.1f}%")
 
             # UI 또는 상태 출력
             if config.SHOW_UI:
                 self._render_ui(frame, results[0], cap)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
-            elif self.frame_count % 100 == 0:
-                print(f"[INFO]     Processing... (Frame: {self.frame_count})")
                 
         self._cleanup(cap)
         return all_detections
