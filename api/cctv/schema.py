@@ -26,7 +26,6 @@ class CctvStatusResponse(BaseModel):
     status: str  # PENDING | IN_PROGRESS | COMPLETED | FAILED
     analyzed_seconds: int
     total_seconds: int
-    progress_percent: float
     detection_count_so_far: int
     started_at: Optional[datetime] = None
     estimated_completion_at: Optional[datetime] = None
@@ -40,7 +39,7 @@ class CctvProgressCallback(BaseModel):
     status: str  # PENDING | IN_PROGRESS | COMPLETED | FAILED
     analyzed_seconds: int
     total_seconds: int
-    progress_percent: float
+    detection_count_so_far: int
     estimated_completion_at: Optional[datetime] = None
 
 # 검출 결과 등록 
