@@ -39,7 +39,6 @@ class CctvProgressCallback(BaseModel):
     status: str  # PENDING | IN_PROGRESS | COMPLETED | FAILED
     analyzed_seconds: int
     total_seconds: int
-    detection_count_so_far: int
     estimated_completion_at: Optional[datetime] = None
 
 # 검출 결과 등록 

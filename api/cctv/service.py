@@ -169,8 +169,7 @@ class CctvService:
                 CctvProgressCallback(
                     video_id=video_id, status="IN_PROGRESS",
                     analyzed_seconds=int(current_sec),
-                    total_seconds=req.duration_seconds,
-                    detection_count_so_far=job["detection_count"]
+                    total_seconds=req.duration_seconds
                 )
             )
 
