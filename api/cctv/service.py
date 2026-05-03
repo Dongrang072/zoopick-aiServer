@@ -127,7 +127,6 @@ class CctvService:
             status=info["status"],
             analyzed_seconds=int(info["total_seconds"] * (info["progress"] / 100)),
             total_seconds=info["total_seconds"],
-            progress_percent=round(float(info["progress"]), 1),
             detection_count_so_far=info["detection_count"],
             started_at=info["started_at"],
             estimated_completion_at=est_completion
@@ -170,8 +169,7 @@ class CctvService:
                 CctvProgressCallback(
                     video_id=video_id, status="IN_PROGRESS",
                     analyzed_seconds=int(current_sec),
-                    total_seconds=req.duration_seconds,
-                    progress_percent=rounded_percent
+                    total_seconds=req.duration_seconds
                 )
             )
 
@@ -281,7 +279,12 @@ class CctvService:
         """실제 HTTP 전송 (짧은 타임아웃 설정)"""
         try:
             res = requests.post(url, json=payload.model_dump(mode='json'), timeout=2.0)
-            return res.status_code == 200
+            if res.status_code == 200:
+                print(f"[INFO]     Callback successfully sent to {url}")
+                return True
+            else:
+                print(f"[WARN]     Callback returned {res.status_code} from {url}")
+                return False
         except Exception as e:
             print(f"[WARN]     Callback failed to {url}: {e}")
             return False
