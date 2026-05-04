@@ -23,10 +23,10 @@ async def enqueue_cctv(request: CctvEnqueueRequest):
         )
 
     # 2. 허용된 경로 prefix 검사 (400 INVALID_PATH)
-    if not request.video_path.startswith(config.DEV_VIDEO_PREFIX):
+    if not request.video_path.startswith(config.VIDEO_DIR):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error_code": "INVALID_PATH", "message": f"Path must start with {config.ALLOWED_VIDEO_PREFIX}"}
+            detail={"error_code": "INVALID_PATH", "message": f"Path must start with {config.VIDEO_DIR}"}
         )
 
     # 3. 파일 존재 여부 검사 (404 VIDEO_NOT_FOUND)
