@@ -2,11 +2,17 @@ import json
 import os
 from datetime import datetime
 from typing import Dict, List, Any
+from config import config
 
 class TheftLogger:
     """도난 의심 이벤트를 JSON 파일로 기록하고 관리하는 클래스"""
     
-    def __init__(self, log_file: str = "output/theft_log.json"):
+    def __init__(self, log_file: str = None):
+        if log_file is None:
+            log_dir = config.LOG_DIR
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            log_file = os.path.join(log_dir, "theft_log.json")
         self.log_file = log_file
         self.events: List[Dict[str, Any]] = []
         self._ensure_output_dir()

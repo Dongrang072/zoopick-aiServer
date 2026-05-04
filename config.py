@@ -53,9 +53,11 @@ class Settings:
     STATIONARY_WEIGHT = 0.2        # 정지 상태 확실성
 
     # --- CCTV 영상 검증 설정 ---
-    ALLOWED_VIDEO_EXTENSIONS = ('.mp4', '.avi', '.mkv')  # 허용 영상 확장자
-    ALLOWED_VIDEO_PREFIX = "/var/mju-lostfound/cctv/videos/"  # 운영 환경 허용 경로
-    DEV_VIDEO_PREFIX = "ai/video/"  # 개발 환경 허용 경로
+    ALLOWED_VIDEO_EXTENSIONS = ('.mp4', '.avi')  # 허용 영상 확장자
+    ALLOWED_VIDEO_PREFIX = "/var/mju-lostfound/cctv/videos/"  # 운영 경로
+    DEV_VIDEO_PREFIX = "ai/video/"  # 개발 경로
+    SNAPSHOT_DIR = "storage/cctv/snapshots"  # 스냅샷 저장 경로
+    LOG_DIR = "storage/cctv" # 로그 저장 경로
 
     # --- CCTV 타임아웃 설정 ---
     ANALYSIS_TIMEOUT_SEC = 1800.0  # 영상 분석 최대 시간 (초)

@@ -26,7 +26,7 @@ class TrackedItem:
 class TheftDetector:
     """도난 탐지 로직을 수행하는 메인 클래스"""
     
-    def __init__(self, fps: float = 30.0, output_dir: str = "output", video_id: int = 0):
+    def __init__(self, fps: float = 30.0, output_dir: str = None, video_id: int = 0):
         # FPS 기반 임계값 및 설정 로드
         self.fps = fps
         self.stationary_threshold = int(config.STATIONARY_DURATION * fps)
