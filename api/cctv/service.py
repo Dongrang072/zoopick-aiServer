@@ -112,16 +112,8 @@ class CctvService:
         info = self.active_jobs[video_id]
         
         # 예상 완료 시간 계산
-        est_completion = None
-        if info["status"] == "IN_PROGRESS" and info["started_at"] and info["progress"] > 0:
-            elapsed = (datetime.now() - info["started_at"]).total_seconds()
-            total_est = elapsed / (info["progress"] / 100.0)
-            rem_est = total_est - elapsed
-            est_completion = datetime.now() + timedelta(seconds=rem_est)
-        elif info["status"] == "PENDING":
-            # 대기 중인 경우: 내 앞의 대기 시간 + 내 영상 처리 시간
-            pass
-
+        wait_sec = self._calculate_current_wait_time()
+        est_completion = datetime.now() + timedelta(seconds=wait_sec)
         return CctvStatusResponse(
             video_id=video_id,
             status=info["status"],
@@ -151,7 +143,8 @@ class CctvService:
         req: CctvEnqueueRequest = job["request"]
         job["status"] = "IN_PROGRESS"
         job["started_at"] = datetime.now()
-        
+        wait_sec = self._calculate_current_wait_time()
+        est_completion = datetime.now() + timedelta(seconds=wait_sec)
         # 메인 이벤트 루프 획득
         loop = asyncio.get_running_loop()
 
@@ -161,15 +154,15 @@ class CctvService:
                 lambda: loop.run_in_executor(None, self._send_callback_impl, url, payload)
             )
 
-        def send_progress(current_sec, percent):
-            rounded_percent = round(float(percent), 1)
-            job["progress"] = rounded_percent
+        def send_progress(current_sec):
             trigger_callback_async(
                 f"{req.callback_base_url}/api/internal/cctv/progress", 
                 CctvProgressCallback(
-                    video_id=video_id, status="IN_PROGRESS",
+                    video_id=video_id, 
+                    status="IN_PROGRESS",
                     analyzed_seconds=int(current_sec),
-                    total_seconds=req.duration_seconds
+                    total_seconds=req.duration_seconds,
+                    estimated_completion_at = est_completion
                 )
             )
 
@@ -198,7 +191,7 @@ class CctvService:
                 job["detection_count"] += 1
 
         print(f"[INFO]     Starting video processing loop...")
-        send_progress(0, 0.0)
+        send_progress(0)
 
         try:
             await asyncio.wait_for(

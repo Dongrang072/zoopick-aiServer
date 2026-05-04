@@ -85,9 +85,10 @@ class VideoProcessor:
             if self.frame_count % progress_interval == 0 or self.frame_count == total_frames:
                 progress_percent = (self.frame_count / total_frames) * 100 if total_frames > 0 else 0
                 current_seconds = self.frame_count / fps
-                if on_progress:
-                    on_progress(current_seconds, progress_percent)
-                
+                # 마지막 프레임은 completed 콜백이 처리하므로 제외
+                if on_progress and self.frame_count < total_frames:
+                    on_progress(current_seconds)
+
                 if not config.SHOW_UI:
                     print(f"[INFO]     Processing... {progress_percent:.1f}%")
 
