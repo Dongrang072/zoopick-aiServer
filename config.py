@@ -9,7 +9,7 @@ class Settings:
     YOLO_MODEL_PATH = "yolo11s.pt"
     
     # --- 실행 환경 설정 ---
-    VIDEO_PATH = "video/test.mp4" # 테스트용 기본 비디오 경로
+    VIDEO_PATH = "storage/cctv/videos/test.mp4" # 테스트용 기본 비디오 경로
     # 실행 파일 이름이 main.py인지 확인하여 서버 환경 감지
     _exec_file = os.path.basename(sys.argv[0])
     IS_SERVER = (_exec_file == 'main.py')
@@ -51,6 +51,9 @@ class Settings:
     OWNER_CLARITY_WEIGHT = 0.5     # 소유자 불일치
     NO_OWNER_WEIGHT = 0.2          # 초기 소유자 없음
     STATIONARY_WEIGHT = 0.2        # 정지 상태 확실성
+
+    # --- Vision 디렉토리 ---
+    VISION_IMAGE_PRE_DIR = "backend/uploads/"
 
     # --- CCTV 영상 검증 설정 ---
     ALLOWED_VIDEO_EXTENSIONS = ('.mp4', '.avi')  # 허용 영상 확장자
