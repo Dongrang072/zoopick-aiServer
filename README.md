@@ -11,12 +11,12 @@ CCTV 영상 분석 워커 및 비전 분석 API를 제공합니다. Spring Boot 
 ```
 <프로젝트_루트>/
 ├── ai/                    # 본 레포지토리 (FastAPI)
-├── back/                  # Spring Boot
 ├── front/                 # 프론트
-└── storage/
-    └── cctv/
-        ├── videos/        # 분석 대상 CCTV 영상
-        └── snapshots/     # 검출 시 저장하는 스냅샷(크롭/프레임)
+└── backend/               # Spring Boot
+    └── storage/
+        └── cctv/
+            ├── videos/        # 분석 대상 CCTV 영상
+            └── snapshots/     # 검출 시 저장하는 스냅샷(크롭/프레임)
 ```
 
 ### 경로와 `config.py`
