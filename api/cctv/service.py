@@ -41,6 +41,7 @@ class CctvService:
         
         self._queue = None
         self.active_jobs: Dict[int, Dict[str, Any]] = {}
+        self.current_speed_factor = config.ANALYSIS_SPEED_FACTOR
         self._initialized = True
 
     def initialize(self):
@@ -65,6 +66,9 @@ class CctvService:
             status = self.active_jobs[request.video_id]['status']
             if status in ["PENDING", "IN_PROGRESS"]:
                 return CctvEnqueueResponse(video_id=request.video_id, queued=False, reason="ALREADY_QUEUED")
+            
+            # 기존에 완료/실패한 작업은 제거 (딕셔너리 순서 갱신을 위해)
+            del self.active_jobs[request.video_id]
 
         # 1. 내 앞의 대기 시간 계산 (현재 요청 추가 전)
         wait_sec = self._calculate_current_wait_time()
@@ -90,18 +94,26 @@ class CctvService:
             estimated_start_at=est_start
         )
 
-    def _calculate_current_wait_time(self) -> float:
-        """현재 대기 중인 작업들이 완료될 때까지의 예상 소요 시간(초)을 계산합니다."""
+    def _calculate_current_wait_time(self, target_video_id: Optional[int] = None) -> float:
+        """현재 대기 중인 작업들이 완료될 때까지의 예상 소요 시간(초)을 계산합니다.
+        target_video_id가 주어지면 해당 작업까지만의 시간을 계산합니다.
+        """
         total_wait = 0.0
         
-        for job in self.active_jobs.values():
-            if job["status"] == "IN_PROGRESS":
-                # 진행 중인 작업의 남은 분량
-                rem_percent = 1.0 - (job["progress"] / 100.0)
-                total_wait += (job["total_seconds"] * rem_percent) / config.ANALYSIS_SPEED_FACTOR
-            elif job["status"] == "PENDING":
-                # 대기 중인 작업의 전체 분량
-                total_wait += job["total_seconds"] / config.ANALYSIS_SPEED_FACTOR
+        for vid, job in self.active_jobs.items():
+            if job["status"] not in ["PENDING", "IN_PROGRESS"]:
+                continue
+            
+            # 진행 중이거나 대기 중인 작업의 남은 분량 계산
+            rem_percent = 1.0 - (job["progress"] / 100.0)
+            
+            # 현재 작업이 진행 중이면 실시간 측정된 속도를 사용하고, 대기 중이면 가장 최근의 실측 속도를 사용
+            speed = self.current_speed_factor if self.current_speed_factor > 0 else config.ANALYSIS_SPEED_FACTOR
+            total_wait += (job["total_seconds"] * rem_percent) / speed
+            
+            # 특정 작업까지만의 시간을 구하는 경우, 해당 작업을 포함하고 종료
+            if target_video_id is not None and vid == target_video_id:
+                break
                 
         return total_wait
 
@@ -111,8 +123,8 @@ class CctvService:
 
         info = self.active_jobs[video_id]
         
-        # 예상 완료 시간 계산
-        wait_sec = self._calculate_current_wait_time()
+        # 해당 영상까지의 예상 완료 시간 계산
+        wait_sec = self._calculate_current_wait_time(video_id)
         est_completion = datetime.now() + timedelta(seconds=wait_sec)
         return CctvStatusResponse(
             video_id=video_id,
@@ -143,8 +155,6 @@ class CctvService:
         req: CctvEnqueueRequest = job["request"]
         job["status"] = "IN_PROGRESS"
         job["started_at"] = datetime.now()
-        wait_sec = self._calculate_current_wait_time()
-        est_completion = datetime.now() + timedelta(seconds=wait_sec)
         # 메인 이벤트 루프 획득
         loop = asyncio.get_running_loop()
 
@@ -155,6 +165,21 @@ class CctvService:
             )
 
         def send_progress(current_sec):
+            # 1. job["progress"] 업데이트
+            job["progress"] = (current_sec / req.duration_seconds) * 100
+            
+            # 2. 동적 속도(Speed Factor) 계산 및 갱신
+            # 최소 2초 이상 경과했고, 5초 이상의 영상 분량을 처리했을 때부터 실측치 반영
+            elapsed_real = (datetime.now() - job["started_at"]).total_seconds()
+            if elapsed_real > 2.0 and current_sec > 5.0:
+                measured_speed = current_sec / elapsed_real
+                # 급격한 변화를 방지하기 위해 가중치 적용 (지수 이동 평균식 활용 가능)
+                self.current_speed_factor = (self.current_speed_factor * 0.7) + (measured_speed * 0.3)
+
+            # 3. 실시간으로 변동된 대기 시간을 반영하여 예상 완료 시간 갱신
+            current_wait_sec = self._calculate_current_wait_time(video_id)
+            dynamic_est_completion = datetime.now() + timedelta(seconds=current_wait_sec)
+
             trigger_callback_async(
                 f"{req.callback_base_url}{config.CALLBACK_PATH_PROGRESS}", 
                 CctvProgressCallback(
@@ -162,7 +187,7 @@ class CctvService:
                     status="IN_PROGRESS",
                     analyzed_seconds=int(current_sec),
                     total_seconds=req.duration_seconds,
-                    estimated_completion_at = est_completion
+                    estimated_completion_at = dynamic_est_completion
                 )
             )
 

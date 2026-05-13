@@ -57,9 +57,9 @@ class Settings:
 
     # --- CCTV 영상 검증 설정 ---
     ALLOWED_VIDEO_EXTENSIONS = ('.mp4', '.avi')  # 허용 영상 확장자
-    VIDEO_DIR = "storage/cctv/videos/"  # 비디오 저장 경로
-    SNAPSHOT_DIR = "storage/cctv/snapshots/"  # 스냅샷 저장 경로
-    LOG_DIR = "storage/cctv/" # 로그 저장 경로
+    VIDEO_DIR = "backend/storage/cctv/videos/"  # 비디오 저장 경로
+    SNAPSHOT_DIR = "backend/storage/cctv/snapshots/"  # 스냅샷 저장 경로
+    LOG_DIR = "backend/storage/cctv/" # 로그 저장 경로
 
     # --- CCTV 타임아웃 설정 ---
     ANALYSIS_TIMEOUT_SEC = 1800.0  # 영상 분석 최대 시간 (초)
